@@ -304,34 +304,51 @@ function renderDiagnostic(ndviData) {
   const contentEl = document.getElementById("diagnostic-content");
   const anomalyEl = document.getElementById("diagnostic-anomaly");
 
-  // Les nuages ne sont pas pris en compte pour l'analyse de biomasse standard
+  // Les nuages ne sont pas pris en compte pour l'analyse
   const validData = ndviData.filter((d) => !d.isCloud);
-  const lastPoint = validData[validData.length - 1];
 
-  let text = "";
-  if (!lastPoint) {
-    text = "Données insuffisantes pour établir un diagnostic.";
-  } else if (lastPoint.value > 0.6) {
-    text =
-      "🟢 <strong>Végétation dense.</strong> Bonne biomasse accumulée sur la parcelle.";
-  } else if (lastPoint.value >= 0.4) {
-    text =
-      "🟡 <strong>Végétation moyenne.</strong> Surveiller l'évolution climatique dans les prochaines semaines.";
-  } else {
-    text =
-      "🔴 <strong>Végétation faible.</strong> Risque de déficit fourrager. Consulter les références techniques.";
+  if (validData.length === 0) {
+    contentEl.innerHTML = "Données insuffisantes pour établir un diagnostic.";
+    anomalyEl.innerHTML = "";
+    return;
   }
 
-  contentEl.innerHTML = text;
+  // Trouvons le pic de saison (valeur maximale de NDVI atteinte) et son mois
+  let peakPoint = validData[0];
+  for (let i = 1; i < validData.length; i++) {
+    if (validData[i].value > peakPoint.value) {
+      peakPoint = validData[i];
+    }
+  }
+
+  const anomalyPoint = ndviData.find((d) => d.isAnomaly);
+  let diagnosticText = "";
+
+  // 1. Analyse basée sur le Pic de Saison (Potentiel fourrager global)
+  if (peakPoint.value > 0.75) {
+    diagnosticText += `🟢 <strong>Fort potentiel fourrager :</strong> Excellent pic de végétation atteint en ${peakPoint.date} (NDVI de ${peakPoint.value}). La parcelle montre une dynamique de croissance optimale.`;
+  } else if (peakPoint.value >= 0.55) {
+    diagnosticText += `🟡 <strong>Production moyenne :</strong> Pic de végétation modéré en ${peakPoint.date} (NDVI de ${peakPoint.value}). Rendement correct mais à surveiller selon les besoins de votre cheptel.`;
+  } else {
+    diagnosticText += `🔴 <strong>Faible vigueur générale :</strong> Le pic de végétation est resté bas (NDVI max de ${peakPoint.value} en ${peakPoint.date}). Risque important de déficit fourrager sur cette parcelle.`;
+  }
+
+  // 2. Analyse de la tendance récente (évite de fausser avec la baisse automnale normale)
+  if (anomalyPoint) {
+    diagnosticText += `<br><br>📈 <strong>Tendance récente :</strong> Perturbée. Une baisse brutale et précoce a été enregistrée en ${anomalyPoint.date}, en déviation de la courbe saisonnière normale.`;
+  } else {
+    diagnosticText += `<br><br>📈 <strong>Tendance récente :</strong> Déclin automnal physiologique normal en cours (sénescence naturelle de fin de saison).`;
+  }
+
+  contentEl.innerHTML = diagnosticText;
 
   // Recherche d'une anomalie dans toute la série
-  const anomalyPoint = ndviData.find((d) => d.isAnomaly);
   if (anomalyPoint) {
     anomalyEl.innerHTML = `
             <div class="anomaly-alert">
                 ⚠️ <strong>Anomalie détectée en ${anomalyPoint.date} :</strong> 
                 une baisse rapide a été enregistrée. Vérifier l'état de la parcelle. 
-                <br><br><em>(Raison possible : Stress hydrique, ravageur, ou coupe non renseignée)</em>
+                <br><br><em>(Raison possible : Stress hydrique localisé, ravageur, ou fauche précoce)</em>
             </div>
         `;
   } else {
