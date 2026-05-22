@@ -190,19 +190,21 @@
         .dashboard { left: 300px; flex-direction: column; height: 80vh; overflow-y: auto; }
       }
     </style>
-  </head>
-  <body>
-    <div class="v1-banner">
-      🌾 MUSEGEO V1 HYBRIDE — Import Copernicus & Analyse Agronomique
-    </div>
+  <title>MuseGeo V1 (Démo) — Monitoring AgTech</title>
+  ...
+  <div class="v1-banner">
+    🌾 MUSEGEO V1 (Démo) — Import Copernicus & Analyse Agronomique
+  </div>
 
-    <header>
-      <a href="#" class="logo"><span>🛰️ MuseGeo V1</span></a>
-      <div style="display: flex; gap: 12px;">
-        <button class="btn btn-outline" style="padding: 8px 16px; font-size: 12px;" id="btn-import-backup">📂 Importer Backup</button>
-        <button class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;" id="btn-export-all">📦 Exporter tout</button>
-      </div>
-    </header>
+  <header>
+    <a href="#" class="logo"><span>🛰️ MuseGeo V1</span></a>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <button class="btn btn-outline" style="padding: 8px 16px; font-size: 12px; border-color: var(--accent); color: var(--accent);" onclick="loadV0Demo()">🎮 Simulation</button>
+      <div style="width: 1px; height: 24px; background: var(--border); margin: 0 4px;"></div>
+      <button class="btn btn-outline" style="padding: 8px 16px; font-size: 12px;" id="btn-import-backup">📂 Importer Backup</button>
+      <button class="btn btn-primary" style="padding: 8px 16px; font-size: 12px;" id="btn-export-all">📦 Exporter tout</button>
+    </div>
+  </header>
 
     <div class="main-layout">
       <aside class="sidebar">
@@ -211,7 +213,7 @@
             <h4>📖 Mode d'emploi</h4>
             <div class="step">
               <span class="step-num">1</span>
-              <div>Cliquez sur le lien Copernicus Browser ci-dessous. Dessinez votre parcelle, sélectionnez NDVI (ou NDWI), puis cliquez sur l'icône Graphique 📈.</div>
+              <div>Cliquez sur le lien Copernicus Browser ci-dessous. (Utilisez la <b>connexion anonyme</b> ou créez un compte gratuit). Dessinez votre parcelle, sélectionnez NDVI, puis cliquez sur l'icône Graphique 📈.</div>
             </div>
             <div class="step">
               <span class="step-num">2</span>
@@ -242,7 +244,7 @@
 
         <div class="sidebar-footer">
           <a href="#" id="link-copernicus-browser" target="_blank" class="btn btn-primary" style="text-decoration: none; color: inherit;">
-            🌍 Copernicus Browser (Plouasne)
+            🌍 Copernicus Browser (Nouvel onglet)
           </a>
         </div>
       </aside>

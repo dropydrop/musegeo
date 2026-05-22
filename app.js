@@ -371,12 +371,13 @@
   };
 
   window.loadV0Demo = () => {
-    const mockId = "P_DEMO";
-    if (parcelles.find(p => p.id === mockId)) return window.selectParcel(mockId);
+    const mockId = "P_SIMULATION";
+    // Si elle existe déjà, on la supprime pour repartir sur une simu propre
+    parcelles = parcelles.filter(p => p.id !== mockId);
 
     const demoParcel = {
         id: mockId,
-        name: "V0 Démo (Plouasne)",
+        name: "🌾 Simulation Prairie (Plouasne)",
         geoJSON: {
             type: "Feature",
             geometry: {
@@ -385,13 +386,15 @@
             }
         },
         history: [
-            { date: "2023-04-01", ndvi: 0.45, ndwi: 0.35 },
-            { date: "2023-05-15", ndvi: 0.65, ndwi: 0.30 },
-            { date: "2023-06-10", ndvi: 0.82, ndwi: 0.25 },
-            { date: "2023-07-05", ndvi: 0.55, ndwi: 0.15 }
+            { date: "2024-03-10", ndvi: 0.35, ndwi: 0.40 },
+            { date: "2024-03-25", ndvi: 0.48, ndwi: 0.38 },
+            { date: "2024-04-10", ndvi: 0.62, ndwi: 0.35 },
+            { date: "2024-04-28", ndvi: 0.78, ndwi: 0.32 },
+            { date: "2024-05-15", ndvi: 0.85, ndwi: 0.31 },
+            { date: "2024-05-22", ndvi: 0.52, ndwi: 0.28 } // Simulation d'une fauche accidentelle (chute brutale)
         ]
     };
-    parcelles.push(demoParcel);
+    parcelles.unshift(demoParcel); // Mettre en haut de liste
     saveAndRefresh();
     window.selectParcel(mockId);
   };
