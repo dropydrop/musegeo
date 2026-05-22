@@ -99,6 +99,10 @@
     activeParcelId = id;
     renderParcelList();
 
+    if (window.innerWidth <= 1024) {
+      document.getElementById("sidebar").classList.remove("active");
+    }
+
     const parcel = parcelles.find(p => p.id === id);
     if (!parcel) return;
 
@@ -414,6 +418,46 @@
       tab.classList.add("active");
       if (activeParcelId) updateDashboardUI();
     };
+  });
+
+  // --- SIDEBAR DRAG & TOGGLE ---
+  const sidebar = document.getElementById("sidebar");
+  const resizer = document.getElementById("resizer");
+  const btnToggle = document.getElementById("btn-toggle-sidebar");
+
+  btnToggle.addEventListener("click", () => {
+    const isMobile = window.innerWidth <= 1024;
+    if (isMobile) {
+      sidebar.classList.toggle("active");
+    } else {
+      sidebar.classList.toggle("collapsed");
+      setTimeout(() => map.invalidateSize(), 300);
+    }
+  });
+
+  let isResizing = false;
+  resizer.addEventListener("mousedown", (e) => {
+    isResizing = true;
+    resizer.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!isResizing) return;
+    let newWidth = e.clientX;
+    if (newWidth < 280) newWidth = 280;
+    if (newWidth > window.innerWidth * 0.5) newWidth = window.innerWidth * 0.5;
+    document.documentElement.style.setProperty("--sidebar-width", `${newWidth}px`);
+    map.invalidateSize();
+  });
+  window.addEventListener("mouseup", () => {
+    if (isResizing) {
+      isResizing = false;
+      resizer.classList.remove("dragging");
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
+      map.invalidateSize();
+    }
   });
 
   // --- BOOTSTRAP ---
