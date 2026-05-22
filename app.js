@@ -72,12 +72,27 @@
     });
   }
 
+  function getParcelColor(parcel) {
+    if (!parcel.history || parcel.history.length === 0) return "#2e7d32";
+    const history = [...parcel.history].sort((a,b) => new Date(a.date) - new Date(b.date));
+    const latest = history[history.length - 1];
+    if (latest.ndvi === undefined) return "#2e7d32";
+    
+    const val = latest.ndvi;
+    if (val < 0.2) return "#ff5252"; // Rouge (Alerte)
+    if (val < 0.4) return "#ffa000"; // Orange (Surveillance)
+    if (val < 0.6) return "#fdd835"; // Jaune (Moyen)
+    if (val < 0.8) return "#00e676"; // Vert clair (Bon)
+    return "#1b5e20"; // Vert foncé (Excellent)
+  }
+
   function renderMapLayers() {
     drawnItems.clearLayers();
     parcelles.forEach(p => {
       if (p.geoJSON) {
+        const pColor = getParcelColor(p);
         const layer = L.geoJSON(p.geoJSON, {
-          style: { color: "#2e7d32", weight: 2, fillOpacity: 0.2 }
+          style: { color: pColor, weight: 3, fillColor: pColor, fillOpacity: 0.35 }
         });
         layer.on("click", () => selectParcel(p.id));
         drawnItems.addLayer(layer);
@@ -442,14 +457,34 @@
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   });
+
+  const resizerDash = document.getElementById("resizer-dash");
+  let isResizingDash = false;
+  if (resizerDash) {
+    resizerDash.addEventListener("mousedown", (e) => {
+      isResizingDash = true;
+      resizerDash.classList.add("dragging");
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    });
+  }
+
   window.addEventListener("mousemove", (e) => {
-    if (!isResizing) return;
-    let newWidth = e.clientX;
-    if (newWidth < 280) newWidth = 280;
-    if (newWidth > window.innerWidth * 0.5) newWidth = window.innerWidth * 0.5;
-    document.documentElement.style.setProperty("--sidebar-width", `${newWidth}px`);
-    map.invalidateSize();
+    if (isResizing) {
+      let newWidth = e.clientX;
+      if (newWidth < 280) newWidth = 280;
+      if (newWidth > window.innerWidth * 0.5) newWidth = window.innerWidth * 0.5;
+      document.documentElement.style.setProperty("--sidebar-width", `${newWidth}px`);
+      map.invalidateSize();
+    }
+    if (isResizingDash) {
+      let newWidth = window.innerWidth - e.clientX;
+      if (newWidth < 300) newWidth = 300;
+      if (newWidth > window.innerWidth * 0.7) newWidth = window.innerWidth * 0.7;
+      document.documentElement.style.setProperty("--dash-width", `${newWidth}px`);
+    }
   });
+
   window.addEventListener("mouseup", () => {
     if (isResizing) {
       isResizing = false;
@@ -457,6 +492,12 @@
       document.body.style.cursor = "default";
       document.body.style.userSelect = "auto";
       map.invalidateSize();
+    }
+    if (isResizingDash) {
+      isResizingDash = false;
+      if (resizerDash) resizerDash.classList.remove("dragging");
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
     }
   });
 
