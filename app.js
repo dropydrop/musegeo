@@ -150,9 +150,11 @@ function selectParcelle(id) {
 
   // 2. Centrer la carte sur la parcelle
   const parcelle = parcelles.find((p) => p.id === id);
+  let center = PLOUASNE_COORDS;
   if (parcelle) {
     const layer = L.geoJSON(parcelle.geoJSON);
     map.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 16 });
+    center = layer.getBounds().getCenter();
   }
 
   // 3. Récupération et affichage des données NDVI
@@ -160,8 +162,48 @@ function selectParcelle(id) {
   renderChart(ndviData);
   renderDiagnostic(ndviData);
 
-  // 4. Ouvrir le dashboard
+  // 4. Mise à jour du lien Copernicus dynamique
+  updateDynamicCopernicusLink(center);
+
+  // 5. Ouvrir le dashboard
   document.getElementById("dashboard-panel").classList.add("active");
+}
+
+/**
+ * Génère l'URL Copernicus pour une coordonnée donnée
+ */
+function updateDynamicCopernicusLink(center) {
+  const linkEl = document.getElementById("link-copernicus-dynamic");
+  if (!linkEl) return;
+
+  const lat = center.lat || center[0];
+  const lng = center.lng || center[1];
+
+  // Dates par défaut (3 derniers mois)
+  const today = new Date();
+  const threeMonthsAgo = new Date(today);
+  threeMonthsAgo.setMonth(today.getMonth() - 3);
+
+  const formatDate = (d) => d.toISOString().split("T")[0];
+  const fromTime = formatDate(threeMonthsAgo) + "T00:00:00.000Z";
+  const toTime = formatDate(today) + "T23:59:59.999Z";
+
+  const visualizationUrl = "https://sh.dataspace.copernicus.eu/ogc/wms/a91f72b3-1e51-44f5-8e7c-6cd379246614";
+
+  const params = new URLSearchParams({
+    zoom: "15",
+    lat: lat.toFixed(6),
+    lng: lng.toFixed(6),
+    themeId: "DEFAULT-THEME",
+    visualizationUrl: visualizationUrl,
+    datasetId: "S2_L2A_CDAS",
+    fromTime: fromTime,
+    toTime: toTime,
+    layerId: "NDVI",
+  });
+
+  const url = "https://browser.dataspace.copernicus.eu/?" + params.toString();
+  linkEl.href = url;
 }
 
 // --- 5. SIMULATION NDVI (Coeur de la démo) ---

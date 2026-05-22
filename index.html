@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MuseGeo - Prototype NDVI</title>
+    <title>MuseGeo — Suivi NDVI Parcellaire</title>
+    <meta name="description" content="MuseGeo – Outil de suivi NDVI parcellaire pour les exploitations agricoles. Accédez aux données satellite Copernicus et visualisez la santé de vos prairies." />
 
     <!-- Favicon 🌱 -->
     <link
@@ -11,7 +12,13 @@
       href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>"
     />
 
-    <!-- Leaflet CSS -->
+    <!-- Google Fonts -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Leaflet CSS (for demo module) -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -21,23 +28,47 @@
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"
     />
-    <!-- Google Fonts -->
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
 
     <style>
+      /* ============================================
+         DESIGN SYSTEM — MuseGeo V0.5
+         ============================================ */
       :root {
+        /* Core palette */
         --primary: #2e7d32;
         --primary-light: #4caf50;
-        --bg-color: #f5f7fa;
-        --surface: #ffffff;
-        --text: #333333;
-        --text-light: #666666;
+        --primary-glow: rgba(76, 175, 80, 0.25);
+        --accent: #00e676;
+        --accent-warm: #ff9100;
+
+        /* Surface & background */
+        --bg-deep: #0a0f1a;
+        --bg-gradient-start: #0d1321;
+        --bg-gradient-end: #1a2332;
+        --surface: rgba(255, 255, 255, 0.04);
+        --surface-hover: rgba(255, 255, 255, 0.08);
+        --surface-active: rgba(255, 255, 255, 0.12);
+        --glass: rgba(255, 255, 255, 0.06);
+        --glass-border: rgba(255, 255, 255, 0.1);
+
+        /* Text */
+        --text-primary: #f0f4f8;
+        --text-secondary: rgba(240, 244, 248, 0.6);
+        --text-muted: rgba(240, 244, 248, 0.35);
+
+        /* Misc */
+        --danger: #ff5252;
+        --demo-banner: #ff5722;
         --border: #e0e0e0;
-        --danger: #d32f2f;
-        --demo-banner: #ff5722; /* Orange vif pour bien alerter */
+        --radius: 16px;
+        --radius-sm: 10px;
+        --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+        /* Legacy light theme (used inside demo module) */
+        --legacy-bg: #f5f7fa;
+        --legacy-surface: #ffffff;
+        --legacy-text: #333333;
+        --legacy-text-light: #666666;
       }
 
       * {
@@ -46,14 +77,388 @@
         padding: 0;
       }
 
+      html {
+        scroll-behavior: smooth;
+      }
+
       body {
         font-family: "Inter", sans-serif;
-        background-color: var(--bg-color);
-        color: var(--text);
+        background: var(--bg-deep);
+        color: var(--text-primary);
+        overflow-x: hidden;
+        min-height: 100vh;
+      }
+
+      /* ============================================
+         LANDING PAGE — Accueil V0.5
+         ============================================ */
+      .landing {
+        min-height: 100vh;
         display: flex;
+        flex-direction: column;
+        background:
+          radial-gradient(ellipse 80% 60% at 50% 0%, rgba(46, 125, 50, 0.12) 0%, transparent 60%),
+          radial-gradient(ellipse 60% 50% at 80% 100%, rgba(0, 230, 118, 0.06) 0%, transparent 50%),
+          linear-gradient(180deg, var(--bg-gradient-start), var(--bg-gradient-end));
+        position: relative;
+      }
+
+      /* Animated grain overlay */
+      .landing::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      /* ---------- Header ---------- */
+      .landing-header {
+        padding: 24px 40px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: relative;
+        z-index: 1;
+      }
+
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-primary);
+        text-decoration: none;
+      }
+
+      .logo-icon {
+        font-size: 28px;
+        filter: drop-shadow(0 0 8px var(--primary-glow));
+      }
+
+      .logo span {
+        background: linear-gradient(135deg, var(--accent), var(--primary-light));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .version-badge {
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--surface);
+        border: 1px solid var(--glass-border);
+        border-radius: 20px;
+        padding: 4px 12px;
+        color: var(--text-secondary);
+        letter-spacing: 0.5px;
+      }
+
+      /* ---------- Hero Section ---------- */
+      .hero {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 24px 80px;
+        text-align: center;
+        position: relative;
+        z-index: 1;
+      }
+
+      .hero-tagline {
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 2.5px;
+        color: var(--accent);
+        margin-bottom: 20px;
+        opacity: 0;
+        animation: fadeInUp 0.6s ease forwards;
+      }
+
+      .hero h1 {
+        font-size: clamp(32px, 5vw, 54px);
+        font-weight: 800;
+        line-height: 1.15;
+        margin-bottom: 16px;
+        max-width: 700px;
+        opacity: 0;
+        animation: fadeInUp 0.6s ease 0.1s forwards;
+      }
+
+      .hero h1 .highlight {
+        background: linear-gradient(135deg, var(--accent), var(--primary-light));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .hero-sub {
+        font-size: 17px;
+        color: var(--text-secondary);
+        max-width: 520px;
+        line-height: 1.6;
+        margin-bottom: 48px;
+        opacity: 0;
+        animation: fadeInUp 0.6s ease 0.2s forwards;
+      }
+
+      /* ---------- Sections Split Layout ---------- */
+      .sections-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        max-width: 1100px;
+        width: 100%;
+        margin: 0 auto;
+        opacity: 0;
+        animation: fadeInUp 0.6s ease 0.3s forwards;
+      }
+
+      .main-section {
+        background: var(--glass);
+        border: 1px solid var(--glass-border);
+        border-radius: 24px;
+        padding: 40px;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        display: flex;
+        flex-direction: column;
+        transition: all var(--transition);
+      }
+
+      .main-section:hover {
+        border-color: rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+
+      .section-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+      }
+
+      .section-copernicus .section-icon {
+        background: linear-gradient(135deg, rgba(0, 230, 118, 0.15), rgba(46, 125, 50, 0.1));
+        box-shadow: 0 0 20px rgba(0, 230, 118, 0.15);
+      }
+
+      .section-demo .section-icon {
+        background: linear-gradient(135deg, rgba(255, 145, 0, 0.15), rgba(255, 87, 34, 0.1));
+        box-shadow: 0 0 20px rgba(255, 145, 0, 0.15);
+      }
+
+      .section-info h2 {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+
+      .section-info .label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+      }
+
+      .section-copernicus .label { color: var(--accent); }
+      .section-demo .label { color: var(--accent-warm); }
+
+      .section-desc {
+        font-size: 15px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+        margin-bottom: 32px;
+        flex: 1;
+      }
+
+      /* ---------- Copernicus Form ---------- */
+      .copernicus-form {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 16px;
+        padding: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .input-group label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+      }
+
+      .input-group input {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--glass-border);
+        border-radius: 10px;
+        padding: 12px;
+        color: white;
+        font-family: inherit;
+        font-size: 14px;
+        transition: all 0.2s;
+      }
+
+      .input-group input:focus {
+        outline: none;
+        border-color: var(--accent);
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      /* ---------- Demo Button ---------- */
+      .btn-launch-demo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: linear-gradient(135deg, #f57c00, #e65100);
+        color: white;
+        text-decoration: none;
+        padding: 20px;
+        border-radius: 16px;
+        font-weight: 700;
+        font-size: 18px;
+        transition: all var(--transition);
+        box-shadow: 0 10px 30px rgba(230, 81, 0, 0.2);
+      }
+
+      .btn-launch-demo:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 15px 40px rgba(230, 81, 0, 0.35);
+      }
+
+      .btn-launch-demo .arrow {
+        transition: transform 0.3s;
+      }
+
+      .btn-launch-demo:hover .arrow {
+        transform: translateX(6px);
+      }
+
+      /* ---------- Footer ---------- */
+      .landing-footer {
+        padding: 24px 40px;
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-muted);
+        position: relative;
+        z-index: 1;
+      }
+
+      .landing-footer a {
+        color: var(--text-secondary);
+        text-decoration: none;
+      }
+
+      .landing-footer a:hover {
+        color: var(--accent);
+      }
+
+      /* ---------- Floating Particles (decorative) ---------- */
+      .particle {
+        position: fixed;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .particle-1 {
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(46, 125, 50, 0.06), transparent 70%);
+        top: 10%;
+        left: -5%;
+        animation: floatSlow 20s ease-in-out infinite;
+      }
+
+      .particle-2 {
+        width: 200px;
+        height: 200px;
+        background: radial-gradient(circle, rgba(0, 230, 118, 0.04), transparent 70%);
+        bottom: 15%;
+        right: -3%;
+        animation: floatSlow 25s ease-in-out infinite reverse;
+      }
+
+      /* ============================================
+         DEMO MODULE — Legacy Section
+         ============================================ */
+      .demo-section {
+        display: none;
         flex-direction: column;
         height: 100vh;
         overflow: hidden;
+        background: var(--legacy-bg);
+        color: var(--legacy-text);
+      }
+
+      .demo-section.active {
+        display: flex;
+      }
+
+      /* Back button bar */
+      .demo-topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 20px;
+        background: var(--bg-deep);
+        border-bottom: 2px solid var(--primary);
+      }
+
+      .btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--surface);
+        border: 1px solid var(--glass-border);
+        color: var(--text-primary);
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-family: "Inter", sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--transition);
+      }
+
+      .btn-back:hover {
+        background: var(--surface-hover);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      .demo-topbar-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
       }
 
       /* Bandeau Démo */
@@ -78,7 +483,7 @@
       /* Sidebar gauche */
       .sidebar {
         width: 320px;
-        background: var(--surface);
+        background: var(--legacy-surface);
         border-right: 1px solid var(--border);
         display: flex;
         flex-direction: column;
@@ -124,7 +529,7 @@
       }
 
       .parcelle-item {
-        background: var(--surface);
+        background: var(--legacy-surface);
         border: 1px solid var(--border);
         border-radius: 6px;
         padding: 12px 15px;
@@ -135,6 +540,7 @@
         cursor: pointer;
         transition: all 0.2s;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        color: var(--legacy-text);
       }
 
       .parcelle-item:hover,
@@ -154,7 +560,7 @@
         border: none;
         cursor: pointer;
         font-size: 16px;
-        color: var(--text-light);
+        color: var(--legacy-text-light);
         padding: 4px;
         border-radius: 4px;
       }
@@ -171,7 +577,7 @@
       }
 
       .btn-survey {
-        background-color: #673ab7; /* Couleur distincte pour le sondage */
+        background-color: #673ab7;
         color: white;
         border: none;
         padding: 14px;
@@ -208,13 +614,13 @@
       /* Dashboard NDVI (Panneau du bas) */
       .dashboard-panel {
         height: 320px;
-        background: var(--surface);
+        background: var(--legacy-surface);
         border-top: 1px solid var(--border);
         box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.05);
         display: flex;
         padding: 20px;
         gap: 25px;
-        transform: translateY(100%); /* Caché par défaut */
+        transform: translateY(100%);
         transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         position: absolute;
         bottom: 0;
@@ -230,12 +636,12 @@
       .chart-container {
         flex: 2;
         position: relative;
-        min-width: 0; /* Important pour Chart.js responsive */
+        min-width: 0;
       }
 
       .diagnostic-container {
         flex: 1;
-        background: var(--bg-color);
+        background: var(--legacy-bg);
         border-radius: 8px;
         padding: 20px;
         overflow-y: auto;
@@ -250,14 +656,14 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        color: var(--text);
+        color: var(--legacy-text);
         font-size: 16px;
       }
 
       .diagnostic-content {
         font-size: 15px;
         line-height: 1.6;
-        color: var(--text);
+        color: var(--legacy-text);
         margin-bottom: 15px;
         padding-bottom: 15px;
         border-bottom: 1px solid var(--border);
@@ -279,7 +685,7 @@
         display: inline-flex;
         align-items: center;
         gap: 5px;
-        margin-top: auto; /* Pousse le lien vers le bas */
+        margin-top: auto;
         color: var(--primary);
         text-decoration: none;
         font-size: 14px;
@@ -298,7 +704,7 @@
         border: none;
         font-size: 24px;
         cursor: pointer;
-        color: var(--text-light);
+        color: var(--legacy-text-light);
         z-index: 10;
         line-height: 1;
       }
@@ -327,18 +733,19 @@
       }
 
       .modal {
-        background: var(--surface);
+        background: var(--legacy-surface);
         padding: 30px;
         border-radius: 12px;
         width: 450px;
         max-width: 90%;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        color: var(--legacy-text);
       }
 
       .modal h2 {
         margin-bottom: 20px;
         font-size: 20px;
-        color: var(--text);
+        color: var(--legacy-text);
       }
 
       .modal label {
@@ -346,7 +753,7 @@
         margin-bottom: 10px;
         font-weight: 600;
         font-size: 14px;
-        color: var(--text);
+        color: var(--legacy-text);
       }
 
       .modal select,
@@ -358,14 +765,15 @@
         border-radius: 6px;
         font-family: inherit;
         font-size: 14px;
-        background: var(--bg-color);
+        background: var(--legacy-bg);
+        color: var(--legacy-text);
       }
 
       .modal select:focus,
       .modal input:focus {
         outline: none;
         border-color: var(--primary);
-        background: var(--surface);
+        background: var(--legacy-surface);
       }
 
       .modal-actions {
@@ -382,11 +790,11 @@
         border-radius: 6px;
         cursor: pointer;
         font-weight: 500;
-        color: var(--text);
+        color: var(--legacy-text);
       }
 
       .btn-cancel:hover {
-        background: var(--bg-color);
+        background: var(--legacy-bg);
       }
 
       .btn-submit {
@@ -405,7 +813,7 @@
 
       .empty-state {
         text-align: center;
-        color: var(--text-light);
+        color: var(--legacy-text-light);
         margin-top: 40px;
         font-size: 14px;
         line-height: 1.5;
@@ -414,71 +822,240 @@
         border-radius: 8px;
         border: 1px dashed var(--border);
       }
+
+      /* ============================================
+         ANIMATIONS
+         ============================================ */
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes floatSlow {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        25% { transform: translate(15px, -20px) scale(1.05); }
+        50% { transform: translate(-10px, 15px) scale(0.95); }
+        75% { transform: translate(20px, 10px) scale(1.02); }
+      }
+
+      /* ============================================
+         RESPONSIVE
+         ============================================ */
+      @media (max-width: 900px) {
+        .sections-container {
+          grid-template-columns: 1fr;
+          max-width: 540px;
+          gap: 24px;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .landing-header {
+          padding: 16px 20px;
+        }
+
+        .hero {
+          padding: 32px 20px 60px;
+        }
+
+        .sidebar {
+          width: 260px;
+        }
+
+        .main-section {
+          padding: 30px 24px;
+        }
+
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
-    <!-- RÈGLE 3 : Bandeau explicite -->
-    <div class="demo-banner">
-      🔍 MODE DÉMONSTRATION – Données simulées pour évaluer l'intérêt de l'outil
+    <!-- ============================================
+         SECTION 1 : LANDING PAGE (Accueil V0.5)
+         ============================================ -->
+    <div class="landing" id="landing-page">
+      <!-- Decorative particles -->
+      <div class="particle particle-1"></div>
+      <div class="particle particle-2"></div>
+
+      <!-- Header -->
+      <header class="landing-header">
+        <a href="#" class="logo" id="logo-home">
+          <span class="logo-icon">🌱</span>
+          <span>MuseGeo</span>
+        </a>
+        <span class="version-badge">V0.5 — Prototype</span>
+      </header>
+
+      <!-- Hero -->
+      <section class="hero">
+        <p class="hero-tagline">Suivi Parcellaire par Satellite</p>
+        <h1>Visualisez la <span class="highlight">santé de vos prairies</span> depuis l'espace</h1>
+        <p class="hero-sub">
+          Accédez à l'indice de végétation NDVI de vos parcelles grâce aux données Copernicus Sentinel-2, directement depuis votre navigateur.
+        </p>
+
+        <!-- Sections Split Layout -->
+        <div class="sections-container">
+          <!-- Section 1 : Copernicus Browser -->
+          <section class="main-section section-copernicus">
+            <div class="section-header">
+              <div class="section-icon">🛰️</div>
+              <div class="section-info">
+                <p class="label">Données Réelles</p>
+                <h2>Copernicus Browser</h2>
+              </div>
+            </div>
+
+            <p class="section-desc">
+              Accédez directement à l'imagerie satellite Sentinel-2. Générez un lien profond vers le portail Copernicus CDAS, centré sur vos coordonnées avec l'indice NDVI activé.
+            </p>
+
+            <div class="copernicus-form">
+              <div class="form-grid">
+                <div class="input-group">
+                  <label for="input-lat">Latitude</label>
+                  <input type="number" id="input-lat" step="0.0001" value="48.3173" />
+                </div>
+                <div class="input-group">
+                  <label for="input-lng">Longitude</label>
+                  <input type="number" id="input-lng" step="0.0001" value="-2.0018" />
+                </div>
+              </div>
+              <div class="form-grid">
+                <div class="input-group">
+                  <label for="input-date-from">Date Début</label>
+                  <input type="date" id="input-date-from" />
+                </div>
+                <div class="input-group">
+                  <label for="input-date-to">Date Fin</label>
+                  <input type="date" id="input-date-to" />
+                </div>
+              </div>
+              <button class="btn-copernicus" id="btn-open-copernicus" type="button">
+                🚀 Ouvrir Copernicus Browser
+              </button>
+              <div class="url-preview" id="url-preview"></div>
+            </div>
+          </section>
+
+          <!-- Section 2 : Archive Démo -->
+          <section class="main-section section-demo">
+            <div class="section-header">
+              <div class="section-icon">🧪</div>
+              <div class="section-info">
+                <p class="label">Archive Démo</p>
+                <h2>Module de Simulation</h2>
+              </div>
+            </div>
+
+            <p class="section-desc">
+              Découvrez la vision originale de MuseGeo. Ce module utilise des données simulées pour illustrer les diagnostics automatiques et la gestion parcellaire simplifiée.
+            </p>
+
+            <div style="margin-top: auto;">
+              <a href="#" class="btn-launch-demo" id="card-open-demo">
+                Accéder à la démo <span class="arrow">→</span>
+              </a>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="landing-footer">
+        <p>MuseGeo — Projet expérimental · GAEC du Haut Thieubry, Plouasne (22) · <a href="https://github.com/dropydrop/musegeo" target="_blank" rel="noopener">GitHub</a></p>
+      </footer>
     </div>
 
-    <div class="app-container">
-      <!-- Sidebar -->
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <h1>🌱 MuseGeo</h1>
-          <!-- RÈGLE 2 : Bouton dessin -->
-          <button id="btn-draw" class="btn-primary">
-            ➕ Dessiner une parcelle
-          </button>
-        </div>
+    <!-- ============================================
+         SECTION 2 : MODULE DÉMO (masqué par défaut)
+         ============================================ -->
+    <div class="demo-section" id="demo-section">
+      <!-- Top navigation bar -->
+      <div class="demo-topbar">
+        <button class="btn-back" id="btn-back-home" type="button">
+          ← Retour
+        </button>
+        <span class="demo-topbar-title">Module de Simulation — Données fictives</span>
+      </div>
 
-        <div class="parcelles-list" id="parcelles-list">
-          <!-- La liste des parcelles sera générée ici via JS -->
-        </div>
+      <!-- RÈGLE 3 : Bandeau explicite -->
+      <div class="demo-banner">
+        🔍 MODE DÉMONSTRATION – Données simulées pour évaluer l'intérêt de l'outil
+      </div>
 
-        <!-- RÈGLE 6 : Intention de sondage -->
-        <div class="survey-section">
-          <button id="btn-open-survey" class="btn-survey">
-            📊 Donner mon avis sur cet outil
-          </button>
-        </div>
-      </aside>
-
-      <!-- Main Workspace -->
-      <main class="main-content">
-        <!-- Carte Leaflet -->
-        <div id="map"></div>
-
-        <!-- Dashboard NDVI -->
-        <div id="dashboard-panel" class="dashboard-panel">
-          <button
-            class="close-dashboard"
-            id="btn-close-dashboard"
-            title="Fermer le panneau"
-          >
-            &times;
-          </button>
-
-          <div class="chart-container">
-            <canvas id="ndviChart"></canvas>
+      <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+          <div class="sidebar-header">
+            <h1>🌱 MuseGeo</h1>
+            <!-- RÈGLE 2 : Bouton dessin -->
+            <button id="btn-draw" class="btn-primary">
+              ➕ Dessiner une parcelle
+            </button>
           </div>
 
-          <div class="diagnostic-container">
-            <div class="diagnostic-title">💬 Diagnostic automatique</div>
-            <div id="diagnostic-content" class="diagnostic-content">
-              <!-- Diagnostic injecté via JS -->
-            </div>
-            <div id="diagnostic-anomaly">
-              <!-- Alerte anomalie injectée via JS -->
-            </div>
-            <!-- RÈGLE 5 : Lien INRAE (simulation) -->
-            <a href="#" class="inrae-link" id="link-inrae"
-              >📖 Voir les fiches techniques INRAE (simulation)</a
+          <div class="parcelles-list" id="parcelles-list">
+            <!-- La liste des parcelles sera générée ici via JS -->
+          </div>
+
+          <!-- RÈGLE 6 : Intention de sondage -->
+          <div class="survey-section">
+            <button id="btn-open-survey" class="btn-survey">
+              📊 Donner mon avis sur cet outil
+            </button>
+          </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+          <!-- Carte Leaflet -->
+          <div id="map"></div>
+
+          <!-- Dashboard NDVI -->
+          <div id="dashboard-panel" class="dashboard-panel">
+            <button
+              class="close-dashboard"
+              id="btn-close-dashboard"
+              title="Fermer le panneau"
             >
+              &times;
+            </button>
+
+            <div class="chart-container">
+              <canvas id="ndviChart"></canvas>
+            </div>
+
+            <div class="diagnostic-container">
+              <div class="diagnostic-title">💬 Diagnostic automatique</div>
+              <div id="diagnostic-content" class="diagnostic-content">
+                <!-- Diagnostic injecté via JS -->
+              </div>
+              <div id="diagnostic-anomaly">
+                <!-- Alerte anomalie injectée via JS -->
+              </div>
+              <!-- RÈGLE 5 : Lien INRAE (simulation) -->
+              <a href="#" class="inrae-link" id="link-inrae"
+                >📖 Voir les fiches techniques INRAE (simulation)</a
+              >
+              <!-- Lien Copernicus dynamique pour la parcelle sélectionnée -->
+              <a href="#" target="_blank" rel="noopener" class="copernicus-link-dynamic" id="link-copernicus-dynamic" style="display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; color: var(--primary); text-decoration: none; font-size: 14px; font-weight: 600;">
+                🛰️ Ouvrir dans Copernicus Browser (NDVI Réel)
+              </a>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
 
     <!-- Modal pour le sondage -->
@@ -518,14 +1095,136 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <!-- Script Leaflet Draw pour le dessin -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <!-- 
-        Choix technique pour le graphique : Chart.js 
-        Option choisie car + rapide (temps estimé: 5 min). 
+    <!--
+        Choix technique pour le graphique : Chart.js
+        Option choisie car + rapide (temps estimé: 5 min).
         Avantages : Standard de l'industrie, rendu professionnel immédiat, gestion native du responsive, des tooltips et des couleurs conditionnelles sans avoir à recoder un canvas manuellement.
     -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- Logique applicative -->
+    <!-- ============================================
+         V0.5 — Navigation & Copernicus Deep Link
+         ============================================ -->
+    <script>
+      (function () {
+        "use strict";
+
+        // ---- DOM Refs ----
+        const landingPage = document.getElementById("landing-page");
+        const demoSection = document.getElementById("demo-section");
+        const btnOpenDemo = document.getElementById("card-open-demo");
+        const btnBackHome = document.getElementById("btn-back-home");
+        const btnCopernicus = document.getElementById("btn-open-copernicus");
+        const urlPreview = document.getElementById("url-preview");
+
+        // ---- Default Dates (last 3 months) ----
+        const today = new Date();
+        const threeMonthsAgo = new Date(today);
+        threeMonthsAgo.setMonth(today.getMonth() - 3);
+
+        const formatDate = (d) => d.toISOString().split("T")[0];
+        document.getElementById("input-date-from").value = formatDate(threeMonthsAgo);
+        document.getElementById("input-date-to").value = formatDate(today);
+
+        // ---- Copernicus URL Builder ----
+        /**
+         * Generates a Copernicus Browser deep-link URL with NDVI layer.
+         * Uses the public EO Browser WMS endpoint for Sentinel-2 L2A NDVI.
+         */
+        function buildCopernicusURL() {
+          const lat = parseFloat(document.getElementById("input-lat").value);
+          const lng = parseFloat(document.getElementById("input-lng").value);
+          const fromDate = document.getElementById("input-date-from").value;
+          const toDate = document.getElementById("input-date-to").value;
+
+          if (isNaN(lat) || isNaN(lng) || !fromDate || !toDate) {
+            return null;
+          }
+
+          // Format dates for Copernicus: YYYY-MM-DDTHH:mm:ss.sssZ
+          const fromTime = fromDate + "T00:00:00.000Z";
+          const toTime = toDate + "T23:59:59.999Z";
+
+          // Use the standard Copernicus Data Space visualization endpoint
+          const visualizationUrl = "https://sh.dataspace.copernicus.eu/ogc/wms/a91f72b3-1e51-44f5-8e7c-6cd379246614";
+
+          const params = new URLSearchParams({
+            zoom: "15",
+            lat: lat.toFixed(6),
+            lng: lng.toFixed(6),
+            themeId: "DEFAULT-THEME",
+            visualizationUrl: visualizationUrl,
+            datasetId: "S2_L2A_CDAS",
+            fromTime: fromTime,
+            toTime: toTime,
+            layerId: "NDVI",
+          });
+
+          return "https://browser.dataspace.copernicus.eu/?" + params.toString();
+        }
+
+        function updatePreview() {
+          const url = buildCopernicusURL();
+          if (url) {
+            urlPreview.innerHTML = '🔗 <a href="' + url + '" target="_blank" rel="noopener">' + url + '</a>';
+            urlPreview.classList.add("visible");
+          }
+        }
+
+        // ---- Copernicus Button ----
+        btnCopernicus.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          const url = buildCopernicusURL();
+          if (url) {
+            updatePreview();
+            window.open(url, "_blank", "noopener");
+          } else {
+            alert("Veuillez renseigner des coordonnées et des dates valides.");
+          }
+        });
+
+        // Update preview on input change
+        ["input-lat", "input-lng", "input-date-from", "input-date-to"].forEach(function (id) {
+          document.getElementById(id).addEventListener("input", updatePreview);
+        });
+
+        // Initial preview
+        updatePreview();
+
+        // ---- Navigation: Landing ↔ Demo ----
+        let mapInitialized = false;
+
+        btnOpenDemo.addEventListener("click", function () {
+          landingPage.style.display = "none";
+          demoSection.classList.add("active");
+
+          // Lazy-initialize the map on first switch
+          if (!mapInitialized) {
+            mapInitialized = true;
+            // Trigger map resize after the container becomes visible
+            setTimeout(function () {
+              if (typeof map !== "undefined") {
+                map.invalidateSize();
+              }
+            }, 100);
+          } else {
+            setTimeout(function () {
+              if (typeof map !== "undefined") {
+                map.invalidateSize();
+              }
+            }, 50);
+          }
+        });
+
+        btnBackHome.addEventListener("click", function () {
+          demoSection.classList.remove("active");
+          landingPage.style.display = "";
+        });
+      })();
+    </script>
+
+    <!-- Logique applicative (module démo legacy) -->
     <script src="app.js"></script>
   </body>
 </html>
