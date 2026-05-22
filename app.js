@@ -1,450 +1,420 @@
 /**
- * MUSEGEO - PROTOTYPE DÉMO
- * Logique Frontend - Vanilla JS
+ * MUSEGEO V1 HYBRIDE — LOGIQUE FRONTEND
+ * No-DB Architecture + Analyse Agronomique Déterministe
  */
 
-// --- 1. CONFIGURATION & INITIALISATION CARTE ---
-// Coordonnées approximatives de Plouasne (Bretagne)
-const PLOUASNE_COORDS = [48.324, -1.942];
-const MAP_ZOOM = 14;
+(function () {
+  "use strict";
 
-// Initialisation de la carte Leaflet
-const map = L.map("map").setView(PLOUASNE_COORDS, MAP_ZOOM);
+  // --- CONFIGURATION ---
+  const PLOUASNE_COORDS = [48.301, -2.007];
+  const MAP_ZOOM = 14;
 
-// Fond de carte OpenStreetMap (Standard, gratuit, sans clé API)
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  attribution:
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors - MuseGeo Démo',
-  maxZoom: 19,
-}).addTo(map);
+  // --- INITIALISATION CARTE ---
+  const map = L.map("map", { zoomControl: false }).setView(PLOUASNE_COORDS, MAP_ZOOM);
+  L.control.zoom({ position: 'topright' }).addTo(map);
 
-// Couche pour stocker les polygones dessinés
-const drawnItems = new L.FeatureGroup();
-map.addLayer(drawnItems);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; MuseGeo V1 · Copernicus Sentinel-2',
+    maxZoom: 19,
+  }).addTo(map);
 
-// --- 2. CONFIGURATION DE L'OUTIL DE DESSIN ---
-// Configuration de Leaflet.draw sans ajouter l'interface par défaut (on utilise notre propre bouton)
-const drawControl = new L.Control.Draw({
-  draw: {
-    polygon: {
-      allowIntersection: false,
-      showArea: true,
-      shapeOptions: {
-        color: "#2e7d32",
-        fillOpacity: 0.4,
-        weight: 2,
-      },
+  const drawnItems = new L.FeatureGroup();
+  map.addLayer(drawnItems);
+
+  const drawControl = new L.Control.Draw({
+    draw: {
+      polygon: { allowIntersection: false, shapeOptions: { color: "#2e7d32", fillOpacity: 0.3 } },
+      polyline: false, circle: false, rectangle: false, marker: false, circlemarker: false,
     },
-    polyline: false,
-    circle: false,
-    rectangle: false,
-    marker: false,
-    circlemarker: false,
-  },
-  edit: false, // Pas de mode édition complexe pour la V1 démo
-});
+    edit: { featureGroup: drawnItems, remove: true }
+  });
 
-// Instance du module de dessin de polygone
-const polygonDrawer = new L.Draw.Polygon(map, drawControl.options.draw.polygon);
+  const polygonDrawer = new L.Draw.Polygon(map, drawControl.options.draw.polygon);
+  document.getElementById("btn-draw").addEventListener("click", () => polygonDrawer.enable());
 
-// Activation du mode dessin au clic sur le bouton
-document.getElementById("btn-draw").addEventListener("click", () => {
-  polygonDrawer.enable();
-});
+  // --- ÉTAT LOCAL ---
+  let parcelles = JSON.parse(localStorage.getItem("musegeo_v1_parcelles") || "[]");
+  let activeParcelId = null;
+  let mainChart = null;
 
-// --- 3. ÉTAT LOCAL (PERSISTANCE) ---
-let parcelles = []; // Array of { id, name, geoJSON }
-let ndviChart = null; // Instance Chart.js
+  // --- GESTION DES PARCELLES ---
+  map.on(L.Draw.Event.CREATED, (e) => {
+    const id = "P" + Date.now();
+    const layer = e.layer;
+    const geoJSON = layer.toGeoJSON();
+    
+    const newParcel = { id, name: "Parcelle " + (parcelles.length + 1), geoJSON, history: [] };
+    parcelles.push(newParcel);
+    saveAndRefresh();
+    selectParcel(id);
+  });
 
-function loadParcelles() {
-  const saved = localStorage.getItem("musegeo_parcelles");
-  if (saved) {
-    parcelles = JSON.parse(saved);
+  function saveAndRefresh() {
+    localStorage.setItem("musegeo_v1_parcelles", JSON.stringify(parcelles));
+    renderParcelList();
+    renderMapLayers();
   }
-}
 
-function saveParcelles() {
-  localStorage.setItem("musegeo_parcelles", JSON.stringify(parcelles));
-}
+  function renderParcelList() {
+    const list = document.getElementById("parcel-list");
+    list.innerHTML = parcelles.length === 0 ? '<p style="font-size:12px;color:gray;text-align:center;margin-top:20px;">Aucune parcelle dessinée.</p>' : "";
+    
+    parcelles.forEach(p => {
+      const item = document.createElement("div");
+      item.className = `parcel-item ${p.id === activeParcelId ? 'active' : ''}`;
+      item.onclick = () => selectParcel(p.id);
+      item.innerHTML = `
+        <span class="parcel-name">${p.name}</span>
+        <button class="btn-del" onclick="deleteParcel('${p.id}', event)">🗑️</button>
+      `;
+      list.appendChild(item);
+    });
+  }
 
-// --- 4. GESTION DES PARCELLES ---
-// Écouteur de fin de dessin Leaflet.draw
-map.on(L.Draw.Event.CREATED, function (e) {
-  const layer = e.layer;
+  function renderMapLayers() {
+    drawnItems.clearLayers();
+    parcelles.forEach(p => {
+      if (p.geoJSON) {
+        const layer = L.geoJSON(p.geoJSON, {
+          style: { color: "#2e7d32", weight: 2, fillOpacity: 0.2 }
+        });
+        layer.on("click", () => selectParcel(p.id));
+        drawnItems.addLayer(layer);
+      }
+    });
+  }
 
-  const newParcelle = {
-    id: Date.now().toString(), // ID unique basé sur le timestamp
-    name: `Parcelle ${parcelles.length + 1}`,
-    geoJSON: layer.toGeoJSON(),
+  window.deleteParcel = function(id, e) {
+    e.stopPropagation();
+    if (confirm("Supprimer cette parcelle ?")) {
+      parcelles = parcelles.filter(p => p.id !== id);
+      if (activeParcelId === id) closeDashboard();
+      saveAndRefresh();
+    }
   };
 
-  parcelles.push(newParcelle);
-  saveParcelles();
-  renderParcellesUI();
+  // --- SELECTION ET DASHBOARD ---
+  window.selectParcel = function(id) {
+    activeParcelId = id;
+    renderParcelList();
 
-  // Auto-sélection de la nouvelle parcelle
-  selectParcelle(newParcelle.id);
-});
+    const parcel = parcelles.find(p => p.id === id);
+    if (!parcel) return;
 
-function renderParcellesUI() {
-  const listEl = document.getElementById("parcelles-list");
-  listEl.innerHTML = "";
+    if (parcel.geoJSON) {
+      const layer = L.geoJSON(parcel.geoJSON);
+      map.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 16 });
+      updateCopernicusLink(layer.getBounds().getCenter());
+    } else {
+      updateCopernicusLink({ lat: PLOUASNE_COORDS[0], lng: PLOUASNE_COORDS[1] });
+    }
 
-  if (parcelles.length === 0) {
-    listEl.innerHTML = `<div class="empty-state">Aucune parcelle.<br>Cliquez sur "Dessiner une parcelle" pour commencer.</div>`;
-  } else {
-    parcelles.forEach((p) => {
-      const item = document.createElement("div");
-      item.className = "parcelle-item";
-      item.dataset.id = p.id;
-      item.onclick = () => selectParcelle(p.id);
+    document.getElementById("dash-title").innerText = parcel.name;
+    document.getElementById("dashboard").classList.add("active");
 
-      item.innerHTML = `
-                <span class="parcelle-name">${p.name}</span>
-                <button class="btn-delete" onclick="deleteParcelle('${p.id}', event)" title="Supprimer la parcelle">🗑️</button>
-            `;
-      listEl.appendChild(item);
+    updateDashboardUI();
+  }
+
+  function updateDashboardUI() {
+    const parcel = parcelles.find(p => p.id === activeParcelId);
+    if (!parcel || !parcel.history || parcel.history.length === 0) {
+      document.getElementById("diag-text").innerText = "Aucune donnée importée pour cette parcelle. Utilisez la zone d'importation CSV.";
+      document.getElementById("biomass-est").innerText = "Estimation Biomasse : -- kg MS/ha";
+      document.getElementById("last-update").innerText = "Dernière mesure : --/--/----";
+      if (mainChart) mainChart.destroy();
+      return;
+    }
+
+    renderCharts();
+    runDiagnostic();
+  }
+
+  function renderCharts() {
+    const ctx = document.getElementById("mainChart").getContext("2d");
+    if (mainChart) mainChart.destroy();
+
+    const parcel = parcelles.find(p => p.id === activeParcelId);
+    const activeTab = document.querySelector(".tab.active").dataset.index;
+    
+    const history = parcel.history.filter(d => d[activeTab] !== undefined).sort((a,b) => new Date(a.date) - new Date(b.date));
+
+    if (history.length === 0) {
+      document.getElementById("biomass-est").innerText = "Données " + activeTab.toUpperCase() + " manquantes.";
+      return;
+    }
+
+    document.getElementById("last-update").innerText = `Dernière mesure : ${history[history.length-1].date}`;
+    
+    if (activeTab === 'ndvi') {
+        const lastVal = history[history.length-1].ndvi;
+        const biomass = Math.round(lastVal * 3500);
+        document.getElementById("biomass-est").innerText = `Estimation Biomasse : ${biomass} kg MS/ha (empirique)`;
+    } else {
+        document.getElementById("biomass-est").innerText = "";
+    }
+
+    mainChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: history.map(d => d.date),
+        datasets: [{
+          label: activeTab.toUpperCase(),
+          data: history.map(d => d[activeTab]),
+          borderColor: activeTab === 'ndvi' ? "#00e676" : "#00b0ff",
+          backgroundColor: "rgba(0, 230, 118, 0.05)",
+          borderWidth: 3,
+          tension: 0.3,
+          pointRadius: 4,
+          pointBackgroundColor: "#fff"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { 
+            y: { 
+                beginAtZero: true, 
+                max: 1.0,
+                grid: { color: "rgba(255,255,255,0.05)" },
+                ticks: { color: "rgba(255,255,255,0.5)" }
+            }, 
+            x: { 
+                grid: { display: false },
+                ticks: { color: "rgba(255,255,255,0.5)" }
+            } 
+        },
+        plugins: { 
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        let label = context.dataset.label + ': ' + context.parsed.y.toFixed(3);
+                        if (activeTab === 'ndvi') {
+                            label += ' | Env. ' + Math.round(context.parsed.y * 3500) + ' kg MS/ha';
+                        }
+                        return label;
+                    }
+                }
+            }
+        }
+      }
     });
   }
 
-  drawParcellesOnMap();
-}
+  function runDiagnostic() {
+    const parcel = parcelles.find(p => p.id === activeParcelId);
+    const history = [...parcel.history].sort((a,b) => new Date(a.date) - new Date(b.date));
+    const latest = history[history.length - 1];
+    const diagEl = document.getElementById("diag-text");
 
-function drawParcellesOnMap() {
-  drawnItems.clearLayers();
+    let message = "";
+    
+    // 1. NDWI Stress Hydrique
+    if (latest.ndwi !== undefined && latest.ndwi < 0.3) {
+        message = "💧 Stress hydrique probable – Surveiller l'irrigation";
+    } 
+    // 2. Chute brutale NDVI (Pleine saison Mai-Août)
+    else if (history.length >= 2) {
+        const prev = history[history.length - 2];
+        const diff = prev.ndvi - latest.ndvi;
+        const month = new Date(latest.date).getMonth() + 1;
+        if (diff > 0.15 && month >= 5 && month <= 8) {
+            message = `⚠️ Alerte : chute brutale détectée le ${latest.date} – Fauche accidentelle ? Piétinement ? Maladie ?`;
+        }
+    }
 
-  parcelles.forEach((p) => {
-    const layer = L.geoJSON(p.geoJSON, {
-      style: {
-        color: "#2e7d32",
-        weight: 2,
-        fillOpacity: 0.4,
-      },
+    // 3. Seuils NDVI si aucun message prioritaire
+    if (!message && latest.ndvi !== undefined) {
+        const val = latest.ndvi;
+        if (val < 0.2) message = "🔴 Sol nu ou stress sévère – Vérifier immédiatement";
+        else if (val < 0.4) message = "🟠 Végétation rare – Surveillance conseillée";
+        else if (val < 0.6) message = "🟡 Végétation modérée – Potentiel moyen";
+        else if (val < 0.8) message = "🟢 Végétation dense – Bon potentiel";
+        else message = "🌟 Végétation très dense – Excellent potentiel";
+    }
+
+    diagEl.innerText = message || "Données insuffisantes pour un diagnostic.";
+  }
+
+  // --- PARSER CSV ---
+  const dropZone = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("file-input");
+
+  dropZone.onclick = () => fileInput.click();
+  
+  dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add("dragover"); };
+  dropZone.ondragleave = () => dropZone.classList.remove("dragover");
+  dropZone.ondrop = (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (file) handleFile(file);
+  };
+
+  function handleFile(file) {
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+        alert("Veuillez sélectionner un fichier CSV.");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => processCSV(e.target.result);
+    reader.readAsText(file);
+  }
+
+  function processCSV(content) {
+    const lines = content.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+    if (lines.length < 2) return alert("Fichier CSV vide ou invalide.");
+
+    const separator = lines[0].includes(";") ? ";" : ",";
+    const headers = lines[0].split(separator).map(h => h.toLowerCase().trim());
+    
+    const dateIdx = headers.findIndex(h => h.includes("date") || h.includes("time"));
+    const valueIdx = headers.findIndex(h => h.includes("mean") || h.includes("c0-mean"));
+
+    if (dateIdx === -1 || valueIdx === -1) {
+        return alert("❌ Format non reconnu. Vérifiez que votre export Copernicus est au format CSV avec des colonnes date et mean.");
+    }
+
+    const isNDWI = headers.some(h => h.includes("ndwi"));
+    const indicator = isNDWI ? "ndwi" : "ndvi";
+
+    const newData = lines.slice(1).map(line => {
+        const parts = line.split(separator);
+        if (parts.length <= Math.max(dateIdx, valueIdx)) return null;
+        
+        let date = parts[dateIdx].replace(/"/g, "");
+        if (date.includes("T")) date = date.split("T")[0]; // YYYY-MM-DD
+        
+        const rawVal = parts[valueIdx].replace(/"/g, "").replace(",", ".");
+        const value = parseFloat(rawVal);
+        return { date, value };
+    }).filter(d => d && !isNaN(d.value));
+
+    if (newData.length === 0) return alert("Aucune donnée valide trouvée.");
+
+    let targetParcel = parcelles.find(p => p.id === activeParcelId);
+    
+    if (!targetParcel) {
+        const id = "P" + Date.now();
+        const dateStr = new Date().toLocaleDateString("fr-FR");
+        targetParcel = { id, name: "Import du " + dateStr, geoJSON: null, history: [] };
+        parcelles.push(targetParcel);
+        activeParcelId = id;
+    }
+
+    newData.forEach(d => {
+        let entry = targetParcel.history.find(h => h.date === d.date);
+        if (!entry) {
+            entry = { date: d.date };
+            targetParcel.history.push(entry);
+        }
+        entry[indicator] = d.value;
     });
 
-    // Au clic sur le polygone sur la carte, on sélectionne la parcelle
-    layer.on("click", () => selectParcelle(p.id));
-    drawnItems.addLayer(layer);
-  });
-}
-
-window.deleteParcelle = function (id, event) {
-  event.stopPropagation(); // Évite de déclencher la sélection au clic
-
-  if (confirm("Voulez-vous vraiment supprimer cette parcelle ?")) {
-    parcelles = parcelles.filter((p) => p.id !== id);
-    saveParcelles();
-    renderParcellesUI();
-
-    // Fermer le dashboard si on vient de supprimer la parcelle active
-    document.getElementById("dashboard-panel").classList.remove("active");
-  }
-};
-
-function selectParcelle(id) {
-  // 1. Mise à jour de l'UI (Sidebar active state)
-  document.querySelectorAll(".parcelle-item").forEach((el) => {
-    el.classList.remove("active");
-    if (el.dataset.id === id) el.classList.add("active");
-  });
-
-  // 2. Centrer la carte sur la parcelle
-  const parcelle = parcelles.find((p) => p.id === id);
-  let center = PLOUASNE_COORDS;
-  if (parcelle) {
-    const layer = L.geoJSON(parcelle.geoJSON);
-    map.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 16 });
-    center = layer.getBounds().getCenter();
+    saveAndRefresh();
+    window.selectParcel(activeParcelId);
   }
 
-  // 3. Récupération et affichage des données NDVI
-  const ndviData = fetchNDVI(id);
-  renderChart(ndviData);
-  renderDiagnostic(ndviData);
+  // --- BACKUP & EXPORT ---
+  document.getElementById("btn-export-all").onclick = () => {
+    const dataStr = JSON.stringify(parcelles, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "musegeo_export.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  // 4. Mise à jour du lien Copernicus dynamique
-  updateDynamicCopernicusLink(center);
+  document.getElementById("btn-import-backup").onclick = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (re) => {
+            try {
+                const imported = JSON.parse(re.target.result);
+                if (Array.isArray(imported)) {
+                    parcelles = imported;
+                    saveAndRefresh();
+                    alert("Backup restauré avec succès !");
+                }
+            } catch (err) { alert("Fichier JSON invalide."); }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+  };
 
-  // 5. Ouvrir le dashboard
-  document.getElementById("dashboard-panel").classList.add("active");
-}
+  // --- UTILITAIRES ---
+  window.toggleSheets = () => {
+    const content = document.getElementById("sheets-content");
+    const icon = document.getElementById("sheets-icon");
+    content.classList.toggle("active");
+    icon.innerText = content.classList.contains("active") ? "▲" : "▼";
+  };
 
-/**
- * Génère l'URL Copernicus pour une coordonnée donnée
- */
-function updateDynamicCopernicusLink(center) {
-  const linkEl = document.getElementById("link-copernicus-dynamic");
-  if (!linkEl) return;
+  window.closeDashboard = () => {
+    document.getElementById("dashboard").classList.remove("active");
+    activeParcelId = null;
+    renderParcelList();
+  };
 
-  const lat = center.lat || center[0];
-  const lng = center.lng || center[1];
+  window.loadV0Demo = () => {
+    const mockId = "P_DEMO";
+    if (parcelles.find(p => p.id === mockId)) return window.selectParcel(mockId);
 
-  // Dates par défaut (3 derniers mois)
-  const today = new Date();
-  const threeMonthsAgo = new Date(today);
-  threeMonthsAgo.setMonth(today.getMonth() - 3);
+    const demoParcel = {
+        id: mockId,
+        name: "V0 Démo (Plouasne)",
+        geoJSON: {
+            type: "Feature",
+            geometry: {
+                type: "Polygon",
+                coordinates: [[[ -2.007, 48.301 ], [ -2.005, 48.301 ], [ -2.005, 48.299 ], [ -2.007, 48.299 ], [ -2.007, 48.301 ]]]
+            }
+        },
+        history: [
+            { date: "2023-04-01", ndvi: 0.45, ndwi: 0.35 },
+            { date: "2023-05-15", ndvi: 0.65, ndwi: 0.30 },
+            { date: "2023-06-10", ndvi: 0.82, ndwi: 0.25 },
+            { date: "2023-07-05", ndvi: 0.55, ndwi: 0.15 }
+        ]
+    };
+    parcelles.push(demoParcel);
+    saveAndRefresh();
+    window.selectParcel(mockId);
+  };
 
-  const formatDate = (d) => d.toISOString().split("T")[0];
-  const fromTime = formatDate(threeMonthsAgo) + "T00:00:00.000Z";
-  const toTime = formatDate(today) + "T23:59:59.999Z";
-
-  const visualizationUrl = "https://sh.dataspace.copernicus.eu/ogc/wms/a91f72b3-1e51-44f5-8e7c-6cd379246614";
-
-  const params = new URLSearchParams({
-    zoom: "15",
-    lat: lat.toFixed(6),
-    lng: lng.toFixed(6),
-    themeId: "DEFAULT-THEME",
-    visualizationUrl: visualizationUrl,
-    datasetId: "S2_L2A_CDAS",
-    fromTime: fromTime,
-    toTime: toTime,
-    layerId: "NDVI",
-  });
-
-  const url = "https://browser.dataspace.copernicus.eu/?" + params.toString();
-  linkEl.href = url;
-}
-
-// --- 5. SIMULATION NDVI (Coeur de la démo) ---
-/**
- * RÈGLE 4 : Génère une série temporelle simulée pour une parcelle.
- * Architecture évolutive : Dans la V2, cette fonction fera un appel fetch() vers Copernicus via Supabase.
- */
-function fetchNDVI(parcelleId) {
-  // Utilisation des derniers chiffres de l'ID pour avoir un rendu constant (déterministe) pour une même parcelle
-  const seed = parseInt(parcelleId.slice(-3)) || 123;
-
-  const dates = [
-    "Mars",
-    "Avril",
-    "Mai",
-    "Juin",
-    "Juillet",
-    "Août",
-    "Septembre",
-    "Octobre",
-  ];
-  // Courbe standard : valeurs basses au printemps, pic en été, baisse en automne
-  const baseCurve = [0.3, 0.45, 0.65, 0.8, 0.75, 0.6, 0.45, 0.35];
-
-  const data = [];
-
-  // Détermination pseudo-aléatoire d'une anomalie (1 chance sur 3 d'avoir un stress)
-  const hasAnomaly = seed % 3 === 0;
-  const anomalyIndex = hasAnomaly ? 4 + (seed % 3) : -1; // Stress en juillet, aout ou septembre
-
-  for (let i = 0; i < dates.length; i++) {
-    let value = baseCurve[i] + Math.sin(seed + i) * 0.05; // Légère variation naturelle
-    let isCloud = false;
-    let isAnomaly = false;
-
-    // Simulation d'un nuage (valeur artificielle très basse)
-    if ((seed + i) % 7 === 0 && i !== anomalyIndex) {
-      value = 0.15;
-      isCloud = true;
-    }
-
-    // Simulation de l'anomalie
-    if (i === anomalyIndex) {
-      value = value - 0.35; // Chute brutale du NDVI
-      isAnomaly = true;
-    }
-
-    // Bornage réaliste entre 0.1 et 0.9
-    value = Math.max(0.1, Math.min(0.9, value));
-
-    data.push({
-      date: dates[i],
-      value: parseFloat(value.toFixed(2)),
-      isCloud: isCloud,
-      isAnomaly: isAnomaly,
+  function updateCopernicusLink(center) {
+    const link = document.getElementById("link-copernicus-browser");
+    const params = new URLSearchParams({
+      zoom: "15", lat: center.lat.toFixed(6), lng: center.lng.toFixed(6),
+      themeId: "DEFAULT-THEME", datasetId: "S2_L2A_CDAS", layerId: "NDVI"
     });
+    link.href = `https://browser.dataspace.copernicus.eu/?${params.toString()}`;
   }
 
-  return data;
-}
-
-// --- 6. AFFICHAGE DU GRAPHIQUE (Chart.js) ---
-function renderChart(ndviData) {
-  const ctx = document.getElementById("ndviChart").getContext("2d");
-
-  if (ndviChart) {
-    ndviChart.destroy();
-  }
-
-  const labels = ndviData.map((d) => d.date);
-  const dataPoints = ndviData.map((d) => d.value);
-
-  ndviChart = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: "Indice de Végétation (NDVI)",
-          data: dataPoints,
-          borderColor: "#2e7d32",
-          backgroundColor: "rgba(46, 125, 50, 0.1)",
-          borderWidth: 2,
-          // Règle de couleur : Gris pour nuage, Rouge pour anomalie, Vert normal
-          pointBackgroundColor: ndviData.map((d) => {
-            if (d.isCloud) return "#9e9e9e";
-            if (d.isAnomaly) return "#d32f2f";
-            return "#2e7d32";
-          }),
-          pointBorderColor: "#ffffff",
-          pointRadius: ndviData.map((d) =>
-            d.isAnomaly ? 6 : d.isCloud ? 4 : 5,
-          ),
-          pointHoverRadius: 8,
-          fill: true,
-          tension: 0.3, // Courbe légèrement lissée
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {
-        intersect: false,
-        mode: "index",
-      },
-      scales: {
-        y: {
-          min: 0,
-          max: 1,
-          title: {
-            display: true,
-            text: "Valeur NDVI",
-          },
-        },
-      },
-      plugins: {
-        legend: {
-          display: false, // Légende cachée pour simplifier l'UI (le titre fait office de légende)
-        },
-        tooltip: {
-          callbacks: {
-            // RÈGLE 4 : Affichage spécifique pour les nuages
-            label: function (context) {
-              const d = ndviData[context.dataIndex];
-              if (d.isCloud) {
-                return " Donnée masquée (nuage/sol nu)";
-              }
-              return ` NDVI : ${d.value}`;
-            },
-          },
-        },
-      },
-    },
+  document.querySelectorAll(".tab").forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      if (activeParcelId) updateDashboardUI();
+    };
   });
-}
 
-// --- 7. DIAGNOSTIC RAG SIMULÉ ---
-function renderDiagnostic(ndviData) {
-  const contentEl = document.getElementById("diagnostic-content");
-  const anomalyEl = document.getElementById("diagnostic-anomaly");
+  // --- BOOTSTRAP ---
+  renderParcelList();
+  renderMapLayers();
 
-  // Les nuages ne sont pas pris en compte pour l'analyse
-  const validData = ndviData.filter((d) => !d.isCloud);
-
-  if (validData.length === 0) {
-    contentEl.innerHTML = "Données insuffisantes pour établir un diagnostic.";
-    anomalyEl.innerHTML = "";
-    return;
-  }
-
-  // Trouvons le pic de saison (valeur maximale de NDVI atteinte) et son mois
-  let peakPoint = validData[0];
-  for (let i = 1; i < validData.length; i++) {
-    if (validData[i].value > peakPoint.value) {
-      peakPoint = validData[i];
-    }
-  }
-
-  const anomalyPoint = ndviData.find((d) => d.isAnomaly);
-  let diagnosticText = "";
-
-  // 1. Analyse basée sur le Pic de Saison (Potentiel fourrager global)
-  if (peakPoint.value > 0.75) {
-    diagnosticText += `🟢 <strong>Fort potentiel fourrager :</strong> Excellent pic de végétation atteint en ${peakPoint.date} (NDVI de ${peakPoint.value}). La parcelle montre une dynamique de croissance optimale.`;
-  } else if (peakPoint.value >= 0.55) {
-    diagnosticText += `🟡 <strong>Production moyenne :</strong> Pic de végétation modéré en ${peakPoint.date} (NDVI de ${peakPoint.value}). Rendement correct mais à surveiller selon les besoins de votre cheptel.`;
-  } else {
-    diagnosticText += `🔴 <strong>Faible vigueur générale :</strong> Le pic de végétation est resté bas (NDVI max de ${peakPoint.value} en ${peakPoint.date}). Risque important de déficit fourrager sur cette parcelle.`;
-  }
-
-  // 2. Analyse de la tendance récente (évite de fausser avec la baisse automnale normale)
-  if (anomalyPoint) {
-    diagnosticText += `<br><br>📈 <strong>Tendance récente :</strong> Perturbée. Une baisse brutale et précoce a été enregistrée en ${anomalyPoint.date}, en déviation de la courbe saisonnière normale.`;
-  } else {
-    diagnosticText += `<br><br>📈 <strong>Tendance récente :</strong> Déclin automnal physiologique normal en cours (sénescence naturelle de fin de saison).`;
-  }
-
-  contentEl.innerHTML = diagnosticText;
-
-  // Recherche d'une anomalie dans toute la série
-  if (anomalyPoint) {
-    anomalyEl.innerHTML = `
-            <div class="anomaly-alert">
-                ⚠️ <strong>Anomalie détectée en ${anomalyPoint.date} :</strong> 
-                une baisse rapide a été enregistrée. Vérifier l'état de la parcelle. 
-                <br><br><em>(Raison possible : Stress hydrique localisé, ravageur, ou fauche précoce)</em>
-            </div>
-        `;
-  } else {
-    anomalyEl.innerHTML = "";
-  }
-}
-
-// --- 8. LOGIQUE DU SONDAGE ET INTERACTIONS SECONDAIRES ---
-
-// Ouverture / Fermeture modal
-document.getElementById("btn-open-survey").addEventListener("click", () => {
-  document.getElementById("survey-modal").classList.add("active");
-});
-
-document.getElementById("btn-close-survey").addEventListener("click", () => {
-  document.getElementById("survey-modal").classList.remove("active");
-});
-
-// Soumission du formulaire
-document.getElementById("survey-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const utilite = document.getElementById("survey-utilite").value;
-  const feature = document.getElementById("survey-feature").value;
-
-  console.log("=== RÉSULTATS DU SONDAGE (POUR V2) ===");
-  console.log("Utilité perçue :", utilite);
-  console.log("Fonctionnalité prioritaire :", feature);
-
-  alert(
-    "Merci ! Votre avis a bien été enregistré. Il sera précieux pour concevoir la V2 de l'outil.",
-  );
-
-  document.getElementById("survey-modal").classList.remove("active");
-  e.target.reset(); // Vider le formulaire
-});
-
-// Lien INRAE (Simulation)
-document.getElementById("link-inrae").addEventListener("click", (e) => {
-  e.preventDefault();
-  alert(
-    "Exemple de fiche technique INRAE – VERSION DÉMO.\n\n(Dans la version finale, ce lien ouvrira une vraie fiche technique adaptée au contexte local et à l'anomalie détectée).",
-  );
-});
-
-// Fermeture du Dashboard
-document.getElementById("btn-close-dashboard").addEventListener("click", () => {
-  document.getElementById("dashboard-panel").classList.remove("active");
-  document
-    .querySelectorAll(".parcelle-item")
-    .forEach((el) => el.classList.remove("active"));
-});
-
-// --- 9. BOOTSTRAP ---
-document.addEventListener("DOMContentLoaded", () => {
-  loadParcelles();
-  renderParcellesUI();
-});
+})();

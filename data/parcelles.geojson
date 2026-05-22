@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "P001",
+      "properties": {
+        "id": "P001",
+        "name": "Le Haut Thieubry"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-1.944200, 48.324100],
+          [-1.942100, 48.325500],
+          [-1.940500, 48.323800],
+          [-1.942500, 48.322500],
+          [-1.944200, 48.324100]
+        ]]
+      }
+    }
+  ]
+}

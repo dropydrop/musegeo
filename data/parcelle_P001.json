@@ -1,0 +1,13 @@
+{
+  "parcelle_id": "P001",
+  "nom": "Le Haut Thieubry",
+  "last_update": "2024-05-22T08:00:00Z",
+  "historique": [
+    { "date": "2024-04-10", "ndvi": 0.62, "ndwi": 0.28, "lai": 2.1, "isCloud": false },
+    { "date": "2024-04-15", "ndvi": 0.65, "ndwi": 0.30, "lai": 2.3, "isCloud": false },
+    { "date": "2024-04-20", "ndvi": 0.12, "ndwi": 0.05, "lai": 0.4, "isCloud": true },
+    { "date": "2024-04-25", "ndvi": 0.68, "ndwi": 0.31, "lai": 2.5, "isCloud": false },
+    { "date": "2024-05-10", "ndvi": 0.74, "ndwi": 0.33, "lai": 2.8, "isCloud": false },
+    { "date": "2024-05-20", "ndvi": 0.78, "ndwi": 0.35, "lai": 3.1, "isCloud": false }
+  ]
+}
